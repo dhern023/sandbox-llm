@@ -3,6 +3,8 @@ Recommended Models for CPU
     Phi-2 - A small but powerful model from Microsoft, optimized for reasoning and language understanding.
     Mistral 7B - A high-performance model that outperforms larger models like Llama 2 13B.
     Gemma 2B - A compact model from Google DeepMind, designed for efficient text generation.
+
+    https://llama-cpp-python.readthedocs.io/en/latest/api-reference
 """
 import llama_cpp
 
