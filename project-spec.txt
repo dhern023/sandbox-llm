@@ -1,0 +1,13 @@
+Build and deploy a fully private Al analyst completely self-hosted, no third-party APIs, and compliant with strict legal data policies.
+
+A full blown internal system that is pretty much an analyst, trained to process subject matter, answer complex questions, and summarize docs but with zero exposure to OpenAl or Anthropic. 
+With control, privacy and automation that can run on a laptop.
+
+Smaller, CPU-Friendly AI Setup Tech stack 
+
+1. Language Model (LLM) models that run efficiently on CPUs.
+	Mistral 7B,
+	Phi-2,
+	Gemma 2B—smaller 
+  Use GGUF quantized models to reduce RAM usage (e.g., use llama.cpp to run them locally).
+
