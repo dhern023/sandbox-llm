@@ -11,3 +11,7 @@ Smaller, CPU-Friendly AI Setup Tech stack
 	Gemma 2B—smaller 
   Use GGUF quantized models to reduce RAM usage (e.g., use llama.cpp to run them locally).
 
+2. Vector Database (For Retrieval)
+	ChromaDB, allows for continual updates, not as fast
+	FAISS, extremely fast, does not allow for updates
+
