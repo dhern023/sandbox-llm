@@ -32,7 +32,7 @@ class InferenceModel:
         TODO: Check the sauce for Llama to see the default context window and if it can be inferred
         """
         self.n_ctx = n_ctx
-        self.model = llama_cpp.Llama(model_path=fname, n_ctx=self.n_ctx)
+        self.model = llama_cpp.Llama(model_path=fname, n_ctx=self.n_ctx, verbose=False)
 
     def tokenize(self, text, **kwargs):
         """
@@ -66,8 +66,9 @@ class EmbedModel:
         """
         Generate embeddings for a list of texts.
         Returns a list of float vectors.
+        TODO: Check if normalize_embeddings parameter will limit us in the future
         """
-        return self.model.encode(list_texts, convert_to_tensor=False).tolist()
+        return self.model.encode(list_texts, normalize_embeddings=True, convert_to_tensor=False).tolist()
 
 # if __name__ == "__main__":
 
