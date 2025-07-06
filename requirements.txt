@@ -1,2 +1,5 @@
-flask
+chromadb
+faiss-cpu
+fastapi
 llama-cpp-python
+sentence-transformers
