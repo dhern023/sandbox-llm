@@ -8,28 +8,69 @@ A hybrid system that continually updates
 Does FAISS require a fixed lenght?
 Anything other than pickle?
 
+LLama-Index for local models
+https://colab.research.google.com/drive/16QMQePkONNlDpgiltOi7oRQgmB8dU5fl?usp=sharing
+
+Haystack
 """
+import asyncio
 import chromadb
 import chromadb.config
-import pathlib
-import uuid
 import datetime
+import haystack
+import haystack.document_stores
+import haystack_integrations.components.retrievers.chroma
+import operator
+import pathlib
+import sentence_transformers
+import uuid
 
 class DynamicDB:
     """
     Add documents to a dynamic collection or collections
     Assumes collections are mutually exclusive
-    """
-    def __init__(self, fname, list_collections):
-        path = pathlib.Path(fname).resolve()
-        settings = chromadb.config.Settings(anonymized_telemetry=False)
-        self.client = chromadb.PersistentClient(settings=settings, path=str(path))
-        self.collections = {
-            name: self.client.get_or_create_collection(name) for name in list_collections
-        }
 
-    def get_collection(self, name):
-        return self.collections.get(name)
+    Supports metadata, dynamic collections, and federated search.
+
+    Relies on LLamaIndex to abstract all of the functionality
+        Use SentenceTransformer wrapper for embedddings
+        Use ChromaDB wrapper for vectorDB
+    """
+    def __init__(self, fname_db, fname_embed, fname_llm, list_collections):
+        """
+        Fname existence is the user responsibility
+
+        https://github.com/chroma-core/chroma/blob/main/chromadb/utils/embedding_functions/sentence_transformer_embedding_function.py
+        """
+        path_db = pathlib.Path(fname_db).resolve()
+        # settings = chromadb.config.Settings(anonymized_telemetry=False)
+        # self.client = chromadb.PersistentClient(settings=settings, path=str(path_db))
+
+        # # Load local LLM
+        # path_llm = pathlib.Path(fname_llm).resolve()
+        # self.llm = llama_index.llms.llama_cpp.LlamaCPP(
+        #     model_path=str(path_llm),
+        #     max_new_tokens=512,
+        #     context_window=4096, # 8192
+        #     verbose=False
+        # )
+
+        # Load local SentenceTransformer
+        path_embed = pathlib.Path(fname_embed).resolve()
+        self.model_embed = sentence_transformers.SentenceTransformer(str(path_embed))
+
+        # Collect the vector storage interfaces
+        self.document_stores = {}
+        for string_collection in list_collections:
+            index = haystack_integrations.document_stores.chroma.ChromaDocumentStore(
+                collection_name=string_collection,
+                persist_path=str(path_db), # same path, different collection
+                embedding_function="SentenceTransformerEmbeddingFunction",
+                # embedding_function_params
+                model_name=str(path_embed),
+                device="cpu"
+            )
+            self.document_stores[string_collection] = index
 
     @staticmethod
     def construct_id(prefix="DOC"):
@@ -40,7 +81,7 @@ class DynamicDB:
 
         return out
 
-    def insert(self, string_collection, list_json, list_embeddings=None):
+    def insert(self, string_collection, list_json):
         """
         Document should have the following structure
         {
@@ -49,11 +90,8 @@ class DynamicDB:
             "id": id or None
         }
         """
-        self.client.heartbeat() # ensure the client remains connected
-        collection = self.get_collection(string_collection)
-        # unwrap
+        index = self.document_stores[string_collection]
         list_docs = []
-        list_meta = []
         list_ids = []
         key_document = "text"
         key_metadata = "metadata"
@@ -63,49 +101,132 @@ class DynamicDB:
             metadata = _json.get(key_metadata, {})
             identifier = _json.get(key_identifier, self.construct_id(string_collection))
 
-            list_docs.append(document)
-            list_meta.append(metadata)
+            doc = haystack.Document(
+                content=document,
+                meta=metadata,
+                id=identifier,
+            )
+            list_docs.append(doc)
             list_ids.append(identifier)
-        
-        # insert
-        collection.add(documents=list_docs, metadatas=list_meta, ids=list_ids, embeddings=list_embeddings)
-        print("Inserted into ChromaDB.")
+        index.write_documents(list_docs)
+        print(f"Inserted {len(list_docs)} documents into '{string_collection}'.")
 
         return list_ids
 
-    def query(self, string_collection, list_embeddings, count_results):
+    def query(self, string_collection, query_string, filters=None, count_results=5):
+        """
+        Query using given text
 
-        self.client.heartbeat() # ensure the client remains connected
-        collection = self.get_collection(string_collection)
-        # call the query
-        dict_out = collection.query(
-            query_embeddings=list_embeddings,
-            n_results=count_results,
-            include = ["embeddings", "metadatas", "documents", "distances"]
+        Functionally equivalent to
+            query_embedding = embed_model.get_query_embedding(query_string)
+            results = retriever.query_with_embedding(query_embedding)
+        """
+        index = self.document_stores[string_collection]
+        retriever = haystack_integrations.components.retrievers.chroma.ChromaQueryTextRetriever(
+            document_store=index,
+            filters=filters,
+            top_k=count_results
         )
+        out = retriever.run(query=query_string)
 
-        return dict_out
+        return out["documents"]
 
-    def query_federated(self, list_embeddings, count_results):
+    def query_via_embedding(self, string_collection, embedding, filters=None, count_results=5):
+        """
+        Query using a precomputed embedding vector.
+
+        NOTE: Does not support batch queries like ChromaDB natively
+        """
+        index = self.document_stores[string_collection]
+        retriever = haystack_integrations.components.retrievers.chroma.ChromaEmbeddingRetriever(
+            document_store=index,
+            filters=filters,
+            top_k=count_results
+        )
+        out = retriever.run(query_embedding=embedding)
+
+        return out["documents"]
+
+    def query_federated(self, query_string, filters=None, count_results=5):
+        """
+        Search across all collections.
+        """
+        best_score = float("-inf") # higher score = more relevant
+        best_document = None
+
+        for string_collection in self.document_stores.keys():
+
+            list_documents = self.query(string_collection, query_string, filters, count_results)
+
+            # pipeline = Pipeline()
+            # pipeline.add_node(component=retriever, name="retriever", inputs=["Query"])
+            # pipeline.add_node(component=self.llm, name="llm", inputs=["retriever"])
+
+            # Run the pipeline with the query string
+            # result = pipeline.run(query=query_string)
+
+            # Extract the response and score
+            # response = result["llm"]["response"]
+            # documents = result["retriever"]["documents"]
+            # response_score = documents[0].score if documents else 0.0  # Default score is 0.0 if no docs
+
+            for document in list_documents:
+                score = document.score
+
+                if best_score < score:
+                    best_document = document
+                    best_score = score
+                    best_collection = string_collection
+                    # best_response = response
+
+        return best_document
+
+    def query_federated_via_embedding(self, embedding, filters=None, count_results=5):
         """
         Search across all collections
         """
-        list_hits_all = []
+        best_score = float("-inf") # higher score = more relevant
+        best_document = None
 
-        for collection_meta in self.client.list_collections():
-            string_collection = collection_metadata.name
+        for string_collection in self.document_stores.keys():
 
-            list_hits = self.query(string_collection, list_embeddings, count_results)
+            list_documents = self.query_via_embedding(string_collection, embedding, filters, count_results)
 
-            for i in range(len(list_hits["documents"][0])):
-                list_hits_all.append({
-                    "collection": name,
-                    "doc": list_hits["documents"][0][i],
-                    "metadata": list_hits["metadatas"][0][i],
-                    "distance": list_hits["distances"][0][i]
-                })
+            # pipeline = Pipeline()
+            # pipeline.add_node(component=retriever, name="retriever", inputs=["Query"])
+            # pipeline.add_node(component=self.llm, name="llm", inputs=["retriever"])
 
-        list_out = sorted(list_hits_all, key=operator.itemgetter("distance"))
+            # Run the pipeline with the query string
+            # result = pipeline.run(query=query_string)
 
-        return list_out
+            # Extract the response and score
+            # response = result["llm"]["response"]
+            # documents = result["retriever"]["documents"]
+            # response_score = documents[0].score if documents else 0.0  # Default score is 0.0 if no docs
 
+            for document in list_documents:
+                score = document.score
+
+                if best_score < score:
+                    best_document = document
+                    best_score = score
+                    best_collection = string_collection
+                    # best_response = response
+
+        return best_document
+
+# if __name__ == "__main__":
+
+#     fname_db = "data/db"
+#     fname_llm = "models/mistral-7b-v0.1.Q4_K_M.gguf" # for debugging tinyllama-1.1b-chat-v1.0.Q2_K.gguf
+#     fname_embed = "models/all-MiniLM-L6-v2"
+#     list_collections = ["docs"]
+
+#     prompt = "Q: What is the capital of France?\nA:"
+
+#     instance_db = DynamicDB(fname_db=fname_db, fname_embed=fname_embed, fname_llm=fname_llm, list_collections=list_collections)
+#     output = instance_db.model_embed.encode(prompt)
+#     print(output)
+
+#     response = instance_db.query_federated("What are the latest advancements in AI?")
+#     print(response)

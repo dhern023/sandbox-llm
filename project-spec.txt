@@ -15,3 +15,9 @@ Smaller, CPU-Friendly AI Setup Tech stack
 	ChromaDB, allows for continual updates, not as fast
 	FAISS, extremely fast, does not allow for updates
 
+3. RAG Pipeline (Retrieval-Augmented Generation)
+	LlamaIndex to abstract the interfaces and ease developement, but 
+		doesn't support adding documents with metadata directly (requires backend interface)
+		requires powerful LLM to parse JSON in simple pipelines due to hard-coded prompts
+	LangChain to fetch relevant documents before passing them to the model.
+	Haystack - contains many wrappers like LLamaIndex. Worried about long-term adoptability.

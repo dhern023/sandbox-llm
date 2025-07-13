@@ -14,7 +14,7 @@ Recommended Embed models for CPU
     | `intfloat/e5-small-v2` | 384 | Optimized for query ↔ doc matching    |
 """
 import llama_cpp
-import sentence_transformers
+
 
 class InferenceModel:
     """
@@ -50,36 +50,11 @@ class InferenceModel:
         
         return response
 
-class EmbedModel:
-    """
-    Class interface saves the tokenizer and model instances
-        so they can be quickly reused.
-    """
+if __name__ == "__main__":
 
-    def __init__(self, fname):
-        """
-        Load embedding model via sentence-transformers
-        """
-        self.model = sentence_transformers.SentenceTransformer(fname)
+    fname_inference = "models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
 
-    def embed(self, list_texts):
-        """
-        Generate embeddings for a list of texts.
-        Returns a list of float vectors.
-        TODO: Check if normalize_embeddings parameter will limit us in the future
-        """
-        return self.model.encode(list_texts, normalize_embeddings=True, convert_to_tensor=False).tolist()
-
-# if __name__ == "__main__":
-
-#     fname_inference = "models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
-#     fname_embed = "models/all-MiniLM-L6-v2"
-
-#     prompt = "Q: What is the capital of France?\nA:"
-#     instance_infer = InferenceModel(fname=fname_inference)
-#     output = instance_infer.infer(prompt)
-#     print(output["choices"][0]["text"])
-
-#     instance_embed = EmbedModel(fname=fname_embed)
-#     output = instance_embed.embed([prompt])
-#     print(output)
+    prompt = "Q: What is the capital of France?\nA:"
+    instance_infer = InferenceModel(fname=fname_inference)
+    output = instance_infer.infer(prompt)
+    print(output["choices"][0]["text"])

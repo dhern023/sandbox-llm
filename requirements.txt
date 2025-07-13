@@ -1,5 +1,6 @@
 chromadb
-faiss-cpu
+chroma-haystack
 fastapi
+haystack
 llama-cpp-python
 sentence-transformers
