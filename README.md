@@ -1,6 +1,10 @@
 # sandbox-llm
 A small LLM interface designed for sandboxed clients 
 
+# Assumptions
+- Low-powered hardware
+- Client has a single domain and provides their documents
+
 # Tech stack
 
 1. TheBloke GGUF quantized model
