@@ -1,6 +1,7 @@
 chromadb
-chroma-haystack
 fastapi
 haystack
+chroma-haystack
+llama-cpp-haystack
 llama-cpp-python
 sentence-transformers
